@@ -1,5 +1,5 @@
 # User specified ignores
-*profile.json
+*credentials.json
 *.swp
 *_query.json
 

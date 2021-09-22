@@ -4,6 +4,7 @@ from datetime import datetime
 
 
 __version__ = '2.1.3'
+logformat =  logging.Formatter("[%(asctime)s] - %(levelname)s: %(message)s")
 
 # File work directory
 WD = os.path.dirname(os.path.realpath(__file__))
@@ -14,5 +15,5 @@ log = logging.getLogger("main_log")
 log.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
-ch.setFormatter(logging.Formatter("[%(asctime)s] - %(levelname)s: %(message)s"))
+ch.setFormatter(logformat)
 log.addHandler(ch)

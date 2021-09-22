@@ -57,3 +57,19 @@ def generate_tagmap(fn, tag, out="{}/meta-{}.json".format(os.getcwd(), TIMESTAMP
     md.write(json.dumps(mdict, indent=4))
     md.close()
     log.debug(f'Generated metadata file {out}')
+
+
+def read_credentials(credentials_path):
+    """Set endpoint, aws id and aws key using a json-file"""
+    with open(credentials_path, 'r') as inp:
+        c = json.load(inp)
+        ep = c['endpoint']
+        aid = c['aws_access_key_id']
+        key = c['aws_secret_access_key']
+        log.debug("Credentials file successfully utilized")
+
+    if not all([c['endpoint'], c['aws_access_key_id'], c['aws_secret_access_key']]):
+        raise MissingCredentialsError('One or more values missing from provided json.')
+
+    return [ep,aid,key]
+

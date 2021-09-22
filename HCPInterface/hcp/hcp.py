@@ -18,6 +18,7 @@ from botocore.utils import fix_s3_host
 from botocore.client import Config
 from boto3.s3.transfer import TransferConfig
 
+from HCPInterface.preproc import preproc
 from HCPInterface.hcp.helpers import calculate_etag
 from HCPInterface.hcp.errors import (UnattachedBucketError, LocalFileExistsError,
                                      UnknownSourceTypeError, MismatchChecksumError, 
@@ -27,7 +28,6 @@ from HCPInterface import log
 
 
 config = get_config()
-
 
 class ProgressPercentage(object):
     """Progressbar for both upload and download of files."""
@@ -105,12 +105,12 @@ def bucketcheck(fn):
 class HCPManager:
     def __init__(self, endpoint="", aws_access_key_id="", aws_secret_access_key="", bucket=None,credentials_path="", debug=False):
         self.bucket = bucket
+        
         if credentials_path != "":
-            self.set_credentials(credentials_path)
+            [ep, aid, key] = preproc.read_credentials(credentials_path)
+            self.set_credentials(ep, aid, key)  
         else:
-            self.endpoint = endpoint
-            self.aws_access_key_id = aws_access_key_id
-            self.aws_secret_access_key = aws_secret_access_key
+            self.set_credentials(endpoint, aws_access_key_id, aws_secret_access_key)
 
         # Very verbose. Use with care.
         if debug:
@@ -160,17 +160,11 @@ class HCPManager:
         if hasattr(self, 'objects'):
             delattr(self, 'objects')  # Incase of already attached bucket
 
-    def set_credentials(self, credentials_path):
-        """Set endpoint, aws id and aws key using a json-file"""
-        with open(credentials_path, 'r') as inp:
-            c = json.load(inp)
-            self.endpoint = c['endpoint']
-            self.aws_access_key_id = c['aws_access_key_id']
-            self.aws_secret_access_key = c['aws_secret_access_key']
-            log.debug("Credentials file successfully utilized")
-
-        if not all([c['endpoint'], c['aws_access_key_id'], c['aws_secret_access_key']]):
-            raise MissingCredentialsError('One or more credentials missing from keys.json.')
+    def set_credentials(self, endpoint, aws_access_key_id, aws_secret_access_key):
+        """Mounts credentials to HCPManager object"""
+        self.endpoint = endpoint
+        self.aws_access_key_id = aws_access_key_id
+        self.aws_secret_access_key = aws_secret_access_key
 
     @bucketcheck
     def get_object(self, key):
@@ -246,7 +240,7 @@ class HCPManager:
             if not force:
                 raise LocalFileExistsError(f'Local file already exists: {local_path}')
 
-        cb = ProgressPercentage(local_path)
+        cb = ProgressPercentage(obj)
         if silent:
             cb = ""
         self.bucket.download_file(obj.key,

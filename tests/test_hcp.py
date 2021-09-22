@@ -22,14 +22,14 @@ hcpm.attach_bucket("ngs-test")
 class TestProcess(unittest.TestCase):
 
     def test01_upload_file(self):
-        self.assertIsNone(hcpm.upload_file(f"{testWD}/data/test_reads_R1.fasterq", "unittest/test_reads_R1.fasterq"))
+        self.assertIsNone(hcpm.upload_file(f"{testWD}/data/test_reads_R1.fasterq", "unittest/test_reads_R1.fasterq",silent=True))
 
     def test02_search_objects(self):
         self.assertEqual(hcpm.search_objects("unittest/test_reads_R1.fasterq")[0].key, "unittest/test_reads_R1.fasterq")
 
     def test03_download_file(self):
         obj = hcpm.get_object("unittest/test_reads_R1.fasterq")
-        self.assertIsNone(hcpm.download_file(obj, "test_reads_R1.fasterq"))
+        self.assertIsNone(hcpm.download_file(obj, "test_reads_R1.fasterq",silent=True,force=True))
 
     def test04_md5_sha256(self):
         remote_etag = hcpm.get_object("unittest/test_reads_R1.fasterq").e_tag

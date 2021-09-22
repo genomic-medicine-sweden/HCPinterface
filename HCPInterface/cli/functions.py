@@ -13,7 +13,7 @@ from pathlib import Path
 
 from HCPInterface import log, TIMESTAMP
 from HCPInterface.hcp import HCPManager
-from HCPInterface.io import io
+from HCPInterface.preproc import preproc
 
 ##############################################
 
@@ -103,18 +103,18 @@ def upload(ctx, input, destination, tag, meta,silent):
         for root, dirs, files in os.walk(folder):
             for f in files:
                 try:
-                    io.verify_fq_suffix(os.path.join(root,f))
-                    io.verify_fq_content(os.path.join(root,f))
-                    io.generate_tagmap(os.path.join(root,f), tag, meta)
+                    preproc.verify_fq_suffix(os.path.join(root,f))
+                    preproc.verify_fq_content(os.path.join(root,f))
+                    preproc.generate_tagmap(os.path.join(root,f), tag, meta)
                     file_lst.append(os.path.join(root,f))
                 except Exception as e:
                     log.debug(f"{f} is not a valid upload file: {e}")
     else:
         input = os.path.abspath(input)
         try:
-            io.verify_fq_suffix(input)
-            io.verify_fq_content(input)
-            io.generate_tagmap(input, tag, meta)
+            preproc.verify_fq_suffix(input)
+            preproc.verify_fq_content(input)
+            preproc.generate_tagmap(input, tag, meta)
             file_lst.append(input)
         except Exception as e:
             log.debug(f"{input} is not a valid upload file: {e}")
