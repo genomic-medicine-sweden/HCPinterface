@@ -3,6 +3,15 @@ import click
 from click.core import Context
 from json import dumps, dump
 from pathlib import Path
+from parse import (
+    parse,
+    Result
+)
+from math import ceil as ceiling
+from hashlib import (
+    sha256,
+    md5
+)
 
 from NGPIris.hcp import HCPHandler
 
@@ -178,6 +187,50 @@ def test_connection(context : Context, bucket : str):
     """
     hcph : HCPHandler = get_HCPHandler(context)
     click.echo(hcph.test_connection(bucket))
+
+@cli.command()
+@click.argument("bucket")
+@click.argument("object_path")
+@click.argument("local_path")
+@click.pass_context
+def compare_contents(context : Context, bucket : str, object_path : str, local_path : str):
+    hcph : HCPHandler = get_HCPHandler(context)
+    hcph.mount_bucket(bucket)
+    # Generate an E-tag for the local file
+    # Compare generated E-tag to the E-tag on the HCP
+    local_etag = ""
+    object_etag = ""
+
+    obj = hcph.get_object(object_path)
+    object_total_etag = str(obj["ETag"])[1:-1] # Ignore the qutoes from the dictionary lookup
+    parse_etag_from_object = parse("{}-{}", object_total_etag)
+    if type(parse_etag_from_object) is Result:
+        etag_from_object = str(parse_etag_from_object[0])
+        number_of_chunks = int(parse_etag_from_object[1])
+        chunk_size = ceiling(int(obj["ContentLength"]) / number_of_chunks)
+        chunk_hashes = []
+        with open(local_path, "rb") as fp:
+            for _ in range(chunk_size):
+                data_chunk = fp.read(chunk_size)
+                chunk_hashes.append(sha256(data_chunk))
+            binary_digests = b''.join(chunk_hash.digest() for chunk_hash in chunk_hashes)
+            local_etag = sha256(binary_digests).hexdigest()
+            object_etag = etag_from_object
+    else: 
+        with open(local_path, "rb") as fp:
+            data = fp.read()
+            local_etag = md5(data).hexdigest()
+            object_etag = object_total_etag
+
+    if object_etag == local_etag:
+        click.echo("Local file have the same content as the bucket object")
+    else:
+        click.echo("Local file does not have the same content as the bucket object")
+    click.echo("object_etag: " + object_etag)
+    click.echo("local_etag: " + local_etag)
+
+
+
 
 @click.command()
 @click.option(
