@@ -210,7 +210,7 @@ def compare_contents(context : Context, bucket : str, object_path : str, local_p
         chunk_size = ceiling(int(obj["ContentLength"]) / number_of_chunks)
         chunk_hashes = []
         with open(local_path, "rb") as fp:
-            for _ in range(chunk_size):
+            for _ in range(number_of_chunks):
                 data_chunk = fp.read(chunk_size)
                 chunk_hashes.append(sha256(data_chunk))
             binary_digests = b''.join(chunk_hash.digest() for chunk_hash in chunk_hashes)
