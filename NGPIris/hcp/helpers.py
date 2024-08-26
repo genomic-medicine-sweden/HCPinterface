@@ -1,6 +1,8 @@
 
 from os import path as p
 from typing import Callable, TypeVar, ParamSpec
+from pathlib import Path
+#from NGPIris.hcp import HCPHandler
 
 from NGPIris.hcp.exceptions import NoBucketMounted
 
@@ -36,4 +38,10 @@ def check_mounted(method : Callable[P, T]) -> Callable[P, T]:
             raise NoBucketMounted("No bucket is mounted")
         return method(*args, **kwargs)
     return check_if_mounted
-    
+
+def download_folder_helper(hcp_handler, local_folder_path : str, object : dict):
+        p = Path(local_folder_path) / Path(object["Key"])
+        if object["Key"][-1] == "/":
+            p.mkdir()
+        else:
+            hcp_handler.download_file(object["Key"], p.as_posix())

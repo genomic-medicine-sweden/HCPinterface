@@ -9,6 +9,8 @@ from os import get_terminal_size
 from math import floor
 from tabulate import tabulate
 
+import time
+
 from NGPIris.hcp import HCPHandler
 
 def get_HCPHandler(context : Context) -> HCPHandler:
@@ -132,6 +134,7 @@ def download_folder(context : Context, bucket : str, folder_path : str, local_pa
     
     hcph : HCPHandler = get_HCPHandler(context)
     hcph.mount_bucket(bucket)
+    #start = time.time()
     if folder_path == "/":
         folder_path = ""
     hcph.download_folder(folder_path, Path(local_path).as_posix())

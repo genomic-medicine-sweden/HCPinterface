@@ -3,7 +3,8 @@ from NGPIris.parse_credentials import CredentialsHandler
 from NGPIris.hcp.helpers import (
     raise_path_error,
     create_access_control_policy,
-    check_mounted
+    check_mounted,
+    download_folder_helper
 )
 from NGPIris.hcp.exceptions import (
     VPNConnectionError,
@@ -19,7 +20,6 @@ from boto3.s3.transfer import TransferConfig
 from configparser import ConfigParser
 
 from pathlib import Path
-
 from os import (
     stat,
     listdir
@@ -33,6 +33,11 @@ from parse import (
 from requests import get
 from urllib3 import disable_warnings
 from tqdm import tqdm
+#from threading import Thread
+from multiprocessing import Pool
+from functools import partial
+
+import time
 
 from typing import Generator
 
@@ -320,15 +325,26 @@ class HCPHandler:
 
         :raises Exception: If local_folder_path is not a directory
         """
+        #threads : list[Thread] = []
         if Path(local_folder_path).is_dir():
-            for object in self.list_objects(folder_key):
-                p = Path(local_folder_path) / Path(object["Key"])
-                if object["Key"][-1] == "/":
-                    p.mkdir()
-                else:
-                    self.download_file(object["Key"], p.as_posix())
+            _download_folder_helper_partial = partial(download_folder_helper, self, local_folder_path)
+            with Pool() as pool:
+                pool.map(_download_folder_helper_partial, self.list_objects(folder_key))
+                
+            #for object in self.list_objects(folder_key):
+            #    p = Path(local_folder_path) / Path(object["Key"])
+            #    if object["Key"][-1] == "/":
+            #        p.mkdir()
+            #    else:
+            #        #thread = Thread(target = self.download_file, args = (object["Key"], p.as_posix()))
+            #        #thread.start()
+            #        #threads.append(thread)
+            #        self.download_file(object["Key"], p.as_posix())
         else:
             raise Exception(local_folder_path + " is not a directory")
+        
+        #for thread in threads:
+        #    thread.join()
 
     @check_mounted
     def upload_file(self, local_file_path : str, key : str = "") -> None:
