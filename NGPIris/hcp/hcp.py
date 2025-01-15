@@ -31,8 +31,12 @@ from os import (
 from json import dumps
 from parse import (
     parse,
-    search,
     Result
+)
+from rapidfuzz import (
+    fuzz,
+    process, 
+    utils
 )
 from requests import get
 from urllib3 import disable_warnings
@@ -62,10 +66,15 @@ class HCPHandler:
         credentials_handler = CredentialsHandler(credentials_path)
         self.hcp = credentials_handler.hcp
         self.endpoint = "https://" + self.hcp["endpoint"]
-        tenant_parse = parse("https://{}.hcp1.vgregion.se", self.endpoint)
-        if type(tenant_parse) is Result:
-            self.tenant = str(tenant_parse[0])
-        else: # pragma: no cover
+
+        self.tenant = None
+        for endpoint_format_string in ["https://{}.ngp-fs1000.vgregion.se", "https://{}.ngp-fs2000.vgregion.se", "https://{}.ngp-fs3000.vgregion.se", "https://{}.vgregion.sjunet.org"]:
+            tenant_parse = parse(endpoint_format_string, self.endpoint) 
+            if type(tenant_parse) is Result:
+                self.tenant = str(tenant_parse[0])
+                break
+        
+        if not self.tenant:
             raise RuntimeError("Unable to parse endpoint. Make sure that you have entered the correct endpoint in your credentials JSON file. Hint: The endpoint should *not* contain \"https://\" or port numbers")
         self.base_request_url = self.endpoint + ":9090/mapi/tenants/" + self.tenant
         self.aws_access_key_id = self.hcp["aws_access_key_id"]
@@ -168,7 +177,9 @@ class HCPHandler:
         elif bucket_name:
             pass
         else:
-            raise RuntimeError("No bucket selected. Either use `mount_bucket` first or supply the optional `bucket_name` paramter for `test_connection`")
+            raise RuntimeError("No bucket selected. Either use `mount_bucket` first or supply the optional `bucket_name` parameter for `test_connection`")
+        
+        response = {}
         try:
             response = dict(self.s3_client.head_bucket(Bucket = bucket_name))
         except EndpointConnectionError as e: # pragma: no cover
@@ -225,7 +236,7 @@ class HCPHandler:
         return list_of_buckets
     
     @check_mounted
-    def list_objects(self, path_key : str = "", name_only : bool = False) -> Generator:
+    def list_objects(self, path_key : str = "", name_only : bool = False, files_only : bool = False) -> Generator:
         """
         List all objects in the mounted bucket as a generator. If one wishes to 
         get the result as a list, use :py:function:`list` to type cast the generator
@@ -234,16 +245,35 @@ class HCPHandler:
         :type path_key: str, optional
         :param name_only: If True, yield only a the object names. If False, yield the full metadata about each object. Defaults to False.
         :type name_only: bool, optional
+        :param files_only: If true, only yield file objects. Defaults to False
+        :type files_only: bool, optional
         :yield: A generator of all objects in a bucket
         :rtype: Generator
         """
         paginator : Paginator = self.s3_client.get_paginator("list_objects_v2")
-        pages : PageIterator = paginator.paginate(Bucket = self.bucket_name)
-        for object in pages.search("Contents[?starts_with(Key, '" + path_key + "')][]"):
-            if name_only:
-                yield str(object["Key"])
-            else:
-                yield object
+        pages : PageIterator = paginator.paginate(Bucket = self.bucket_name, Prefix = path_key)
+
+        if files_only:
+            filter_string = "Contents[?!ends_with(Key, '/')][]"
+        else:
+            filter_string = "Contents[*][]"
+
+        split_path_key = len(path_key.split("/")) + 1
+
+        pages_filtered = pages.search(filter_string)
+        for object in pages_filtered:
+            # Split the object key by "/"
+            split_object = object["Key"].split("/")
+            # Check if the object is within the specified path_key depth
+            if len(split_object) <= split_path_key:
+                # Skip objects that are not at the desired depth
+                if (len(split_object) == split_path_key) and split_object[-1]:
+                    continue
+                
+                if name_only:
+                    yield str(object["Key"])
+                else:
+                    yield object
                     
     @check_mounted
     def get_object(self, key : str) -> dict:
@@ -373,6 +403,9 @@ class HCPHandler:
             file_name = Path(local_file_path).name
             key = file_name
 
+        if "\\" in local_file_path:
+            raise RuntimeError("The \"\\\" character is not allowed in the file path")
+
         if self.object_exists(key):
             raise ObjectAlreadyExist("The object \"" + key + "\" already exist in the mounted bucket")
         else:
@@ -421,25 +454,24 @@ class HCPHandler:
         :type verbose: bool, optional
         """
         object_list = []
-        for key in keys:
-            object_list.append({"Key" : key})
-
-        deletion_dict = {"Objects": object_list}
-
-        response : dict = self.s3_client.delete_objects(
-            Bucket = self.bucket_name,
-            Delete = deletion_dict
-        )
-        if verbose:
-            print(dumps(response, indent=4))
-        
-        deleted_dict_list : list[dict] = response["Deleted"]
         does_not_exist = []
-        for deleted_dict in deleted_dict_list:
-            if not "VersionId" in deleted_dict:
-                does_not_exist.append("- " + key + "\n")
-        if does_not_exist:
-            print("The following could not be deleted because they didn't exist: \n" + "".join(does_not_exist))
+        for key in keys:
+            if self.object_exists(key):
+                object_list.append({"Key" : key})
+            else:
+                does_not_exist.append(key)
+
+        if object_list:
+            deletion_dict = {"Objects": object_list}
+            response : dict = self.s3_client.delete_objects(
+                Bucket = self.bucket_name,
+                Delete = deletion_dict
+            )
+            if verbose:
+                print(dumps(response, indent=4))
+            
+        if verbose and does_not_exist:
+            print("The following could not be deleted because they didn't exist: \n" + "\n".join(does_not_exist))
     
     @check_mounted
     def delete_object(self, key : str, verbose : bool = True) -> None:
@@ -456,51 +488,98 @@ class HCPHandler:
     @check_mounted
     def delete_folder(self, key : str, verbose : bool = True) -> None:
         """
-        Delete a folder of objects in the mounted bucket. If there are subfolders, a RuntimeError is raisesd
+        Delete a folder of objects in the mounted bucket. If there are subfolders, a RuntimeError is raised
 
         :param key: The folder of objects to be deleted
         :type key: str
         :param verbose: Print the result of the deletion. defaults to True
         :type verbose: bool, optional
-        :raises RuntimeError: If there are subfolders, a RuntimeError is raisesd
+        :raises RuntimeError: If there are subfolders, a RuntimeError is raised
         """
         if key[-1] != "/":
             key += "/"
-        object_path_in_folder = []
-        for s in self.search_objects_in_bucket(key):
-            parse_object = parse(key + "{}", s)
-            if type(parse_object) is Result:
-                object_path_in_folder.append(s)
 
-        for object_path in object_path_in_folder:
-            if object_path[-1] == "/":
+        objects : list[str] = list(self.list_objects(key, name_only = True))
+
+        if not objects:
+            raise RuntimeError("\"" + key + "\"" + " is not a valid path") #TODO: change this error
+
+        for object_path in objects:
+            if (object_path[-1] == "/") and (not object_path == key): # `objects` might contain key, in which case everything is fine
                 raise RuntimeError("There are subfolders in this folder. Please remove these first, before deleting this one")
-        self.delete_objects(object_path_in_folder + [key], verbose = verbose)
+        self.delete_objects(objects, verbose = verbose)
 
     @check_mounted
-    def search_objects_in_bucket(self, search_string : str, case_sensitive : bool = False) -> list[str]:
+    def search_in_bucket(
+        self, 
+        search_string : str, 
+        name_only : bool = True, 
+        case_sensitive : bool = False
+    ) -> Generator:
         """
-        Simple search method using substrings in order to find certain objects. Case insensitive by default. Does not utilise the HCI
+        Simple search method using exact substrings in order to find certain 
+        objects. Case insensitive by default. Does not utilise the HCI
 
         :param search_string: Substring to be used in the search
         :type search_string: str
 
+        :param name_only: If True, yield only a the object names. If False, yield the full metadata about each object. Defaults to False.
+        :type name_only: bool, optional
+
         :param case_sensitive: Case sensitivity. Defaults to False
         :type case_sensitive: bool, optional
 
-        :return: List of object names that match the in some way to the object names
-        :rtype: list[str]
+        :return: A generator of objects based on the search string
+        :rtype: Generator
         """
-        search_result : list[str] = []
-        for key in self.list_objects(name_only = True):
-            parse_object = search(
+        return self.fuzzy_search_in_bucket(search_string, name_only, case_sensitive, 100)
+        
+    @check_mounted
+    def fuzzy_search_in_bucket(
+        self, 
+        search_string : str, 
+        name_only : bool = True, 
+        case_sensitive : bool = False, 
+        threshold : int = 80
+    ) -> Generator:
+        """
+        Fuzzy search implementation based on the `RapidFuzz` library.
+
+        :param search_string: Substring to be used in the search
+        :type search_string: str
+
+        :param name_only: If True, yield only a the object names. If False, yield the full metadata about each object. Defaults to False.
+        :type name_only: bool, optional
+
+        :param case_sensitive: Case sensitivity. Defaults to False
+        :type case_sensitive: bool, optional
+
+        :param threshold: The fuzzy search similarity score. Defaults to 80
+        :type threshold: int, optional
+        
+        :return: A generator of objects based on the search string
+        :rtype: Generator
+        """
+        
+        if case_sensitive:
+            processor = None
+        else:
+            processor = utils.default_process 
+
+        if not name_only:
+            full_list = list(self.list_objects())
+
+        for item, score, index in process.extract_iter(
                 search_string, 
-                key, 
-                case_sensitive = case_sensitive
-            )
-            if type(parse_object) is Result:
-                search_result.append(key)
-        return search_result
+                self.list_objects(name_only = True), 
+                scorer = fuzz.partial_ratio,
+                processor = processor
+            ):
+            if score >= threshold:
+                if name_only:
+                    yield item
+                else:
+                    yield full_list[index] # type: ignore
 
     @check_mounted
     def get_object_acl(self, key : str) -> dict:

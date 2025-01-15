@@ -15,6 +15,7 @@
   - [The `HCPHandler` class](#the-hcphandler-class)
     - [Example use cases](#example-use-cases-1)
       - [Listing buckets/namespaces](#listing-bucketsnamespaces-1)
+      - [Listing objects in a bucket/namespace](#listing-objects-in-a-bucketnamespace)
       - [Downloading a file](#downloading-a-file-1)
       - [Uploading a file](#uploading-a-file-1)
       - [Uploading a folder](#uploading-a-folder)
@@ -27,13 +28,16 @@
       - [Look up information of an index](#look-up-information-of-an-index)
       - [Make queries](#make-queries)
 ---
+
+This tutorial was updated for `NGPIris 5.1`.
+
 ## Introduction
-IRIS 5 is a complete overhaul of the previous versions of IRIS, mainly in terms of its codebase. The general functionality like download from and upload to the HCP are still here, but might differ from previous versions from what you are used to. This document will hopefully shed some light on what you (the user) can expect and how your workflow with IRIS might change in comparison to previous versions of IRIS. 
+IRIS 5 is a complete overhaul of the previous versions of IRIS, mainly in terms of its codebase. The general functionality like download from and upload to the HCP are still here, but might differ from previous versions from what you are used to. This document will hopefully shed some light on what users can expect and how your workflow with IRIS might change in comparison to previous versions of IRIS. 
 
 IRIS 5, like previous versions of IRIS, consists of two main parts: a Python package and an associated Command Line Interface (CLI), which are described below. 
 
 ## CLI 
-IRIS 5 features a CLI like recent versions of IRIS. However, the new CLI is a bit different compared to before; the general structure of subcommands for the `iris` command are totally different, but it still has the subcommands you would come to expect. A new command, `iris_generate_credentials_file`, has also been added. It will generate an empty credentials file that can be filled in with your own NGPr credentials. 
+IRIS 5 features a CLI like recent versions of IRIS. However, the new CLI is a bit different compared to before; the general structure of subcommands for the `iris` command are vastly different, but it still has the subcommands you would come to expect. A new, separate, command called `iris_generate_credentials_file` has also been added. It will generate an empty credentials file that can be filled in with your own NGPr credentials. 
 
 ### The `iris` command
 
@@ -52,7 +56,7 @@ Options:
 Commands:
   delete-folder    Delete a folder from an HCP bucket/namespace.
   delete-object    Delete an object from an HCP bucket/namespace.
-  download         Download files from an HCP bucket/namespace.
+  download         Download a file or folder from an HCP bucket/namespace.
   list-buckets     List the available buckets/namespaces on the HCP.
   list-objects     List the objects in a certain bucket/namespace on the...
   simple-search    Make simple search using substrings in a...
@@ -61,42 +65,13 @@ Commands:
 ```
 * `delete-folder`: Deletes a folder on the HCP
 * `delete-object`: Deletes an object on the HCP
-* `download`:
-  * Downloads a file from a bucket/namespace on the HCP
-  * `iris path/to/credentials.json download --help`:
-    * ```cmd
-      Usage: iris CREDENTIALS download [OPTIONS] OBJECT BUCKET LOCAL_PATH
-
-        Download files from an HCP bucket/namespace.
-
-        OBJECT is the name of the object to be downloaded.
-
-        BUCKET is the name of the upload destination bucket.
-
-        LOCAL_PATH is the path to where the downloaded objects are to be stored
-        locally.
-
-      Options:
-        --help  Show this message and exit.
-      ```
+* `download`: Downloads a file or folder from a bucket/namespace on the HCP
 * `list-buckets`: Lists all buckets that the user is allowed to see
 * `list-objects`: Lists all objects that the user is allowed to see
 * `simple-search`: Performs a simple search using a substring in order to find matching objects in a bucket/namespace
-* `upload`:
-  * Uploads either a file or a folder to a bucket/namespace on the HCP
-  * `iris path/to/credentials.json upload --help`:
-    * ```cmd
-      Usage: iris CREDENTIALS upload [OPTIONS] FILE_OR_FOLDER BUCKET
+* `test-connection`: Used for testing your connection to the HCP
+* `upload`: Uploads a file or a folder to a bucket/namespace on the HCP
 
-        Upload files to an HCP bucket/namespace.
-
-        FILE-OR-FOLDER is the path to the file or folder of files to be uploaded.
-
-        BUCKET is the name of the upload destination bucket.
-
-      Options:
-        --help  Show this message and exit.
-      ```
 #### Example use cases
 The following subsections contain examples of simple use cases for IRIS 5. Of course, correct paths and bucket names should be replaced for your circumstances.
 ##### Listing buckets/namespaces
@@ -105,11 +80,11 @@ iris path/to/your/credentials.json list-buckets
 ```
 ##### Downloading a file
 ```shell
-iris path/to/your/credentials.json download path/to/your/file/on/the/bucket the_name_of_the_bucket path/on/your/local/machine
+iris path/to/your/credentials.json download the_name_of_the_bucket path/to/your/file/in/the/bucket path/on/your/local/machine
 ```
 ##### Uploading a file
 ```shell
-iris path/to/your/credentials.json upload destination/path/on/the/bucket the_name_of_the_bucket path/to/your/file/on/your/local/machine
+iris path/to/your/credentials.json upload the_name_of_the_bucket destination/path/in/the/bucket path/to/your/file/on/your/local/machine
 ```
 ##### Searching for a file
 By default, the `simple-search` command is case insensitive:
@@ -122,11 +97,11 @@ iris path/to/your/credentials.json simple-search --case_sensitive True the_name_
 ```
 ##### Delete a file
 ```shell
-iris path/to/your/credentials.json delete-object path/to/your/file/on/the/bucket the_name_of_the_bucket
+iris path/to/your/credentials.json delete-object the_name_of_the_bucket path/to/your/file/in/the/bucket
 ```
 ##### Delete a folder
 ```shell
-iris path/to/your/credentials.json delete-folder path/to/your/folder/on/the/bucket/ the_name_of_the_bucket
+iris path/to/your/credentials.json delete-folder the_name_of_the_bucket path/to/your/folder/on/the/bucket/
 ```
 
 ### The `iris_generate_credentials_file` command
@@ -140,8 +115,9 @@ Usage: iris_generate_credentials_file [OPTIONS]
   plaintext.
 
 Options:
-  --path TEXT  Path for where to put the new credentials file
-  --name TEXT  Custom name for the credentials file
+  --path TEXT  Path for where to put the new credentials file.
+  --name TEXT  Custom name for the credentials file. Will filter out
+               everything after a "." character, if any exist.
   --help       Show this message and exit.
 ```
 Simply running `iris_generate_credentials_file` will generate a blank credentials file (which is just a JSON file) like the following:
@@ -184,6 +160,7 @@ hcp_h = HCPHandler("credentials.json")
 
 hcp_h.mount_bucket("myBucket")
 ```
+
 #### Example use cases
 ##### Listing buckets/namespaces
 There is no need for mounting a bucket when listing all available buckets. However, credentials are still needed. As such, we can list all buckets with the following:
@@ -194,6 +171,20 @@ hcp_h = HCPHandler("credentials.json")
 
 print(hcp_h.list_buckets())
 ```
+##### Listing objects in a bucket/namespace
+Since there might be many objects in a given bucket, a regular Python list would be memory inefficient. As such, a `Generator` is returned instead. Since `Generator`s are lazy objects, if we want to explicitly want all the objects we must first cast it to a `list`
+```python
+from NGPIris.hcp import HCPHandler
+
+hcp_h = HCPHandler("credentials.json")
+
+hcp_h.mount_bucket("myBucket")
+
+objects_generator = hcp_h.list_objects()
+
+print(list(objects_generator))
+```
+
 ##### Downloading a file
 ```python
 from NGPIris.hcp import HCPHandler

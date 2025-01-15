@@ -142,7 +142,7 @@ build*/
 *dist*/
 dl/*
 
-credentials/*.json
+credentials/*
 !credentials/credentials_template.json
 queries/*.json
 !queries/query_template.json

@@ -1,0 +1,39 @@
+
+name: PyType
+
+on:
+  push:
+    branches: ["dev"]
+  pull_request:
+    branches: ["dev", "master"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pytype:
+    name: Run PyType
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Create and start virtual environment
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+
+    - name: Install dependencies
+      run: |
+        pip install pytype
+        pip install .
+
+    - name: Run pytype
+      run: |
+        pytype
