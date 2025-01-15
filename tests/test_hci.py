@@ -1,10 +1,14 @@
 
+from configparser import ConfigParser
 from NGPIris.hci import HCIHandler
 from random import randint
 from json import dump
 from os import remove
 
-hci_h = HCIHandler("credentials/testCredentials.json")
+ini_config = ConfigParser()
+ini_config.read("tests/test_conf.ini")
+
+hci_h = HCIHandler(ini_config.get("General", "credentials_path"))
 hci_h.request_token()
 
 def test_list_index_names_type() -> None:
